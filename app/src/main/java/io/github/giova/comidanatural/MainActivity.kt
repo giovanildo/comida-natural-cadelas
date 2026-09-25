@@ -43,6 +43,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -72,9 +73,12 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -104,23 +108,41 @@ import java.util.Locale
 private val BR: Locale = Locale.forLanguageTag("pt-BR")
 private val money: NumberFormat = NumberFormat.getCurrencyInstance(BR)
 private val dayFmt = DateTimeFormatter.ofPattern("EEE, dd/MM", BR)
-private val shortFmt = DateTimeFormatter.ofPattern("dd/MM", BR)
+internal val shortFmt = DateTimeFormatter.ofPattern("dd/MM", BR)
 private val shortYearFmt = DateTimeFormatter.ofPattern("dd/MM/yyyy", BR)
 
-private fun num(v: Double, decimals: Int = 2): String =
+internal fun num(v: Double, decimals: Int = 2): String =
     NumberFormat.getNumberInstance(BR).apply {
         maximumFractionDigits = decimals
         minimumFractionDigits = 0
     }.format(v)
 
-private fun kg(v: Double) = "${num(v, 2)} kg"
-private fun g(vKg: Double) = "${num(vKg * 1000, 0)} g"
+internal fun kg(v: Double) = "${num(v, 2)} kg"
+internal fun g(vKg: Double) = "${num(vKg * 1000, 0)} g"
 private fun parse(s: String): Double? = s.trim().replace(',', '.').toDoubleOrNull()
 
 private fun typeColor(t: DayType): Color = when (t) {
     DayType.NATURAL -> Color(0xFF4E9A5B)
     DayType.RACAO -> Color(0xFFE0A030)
     DayType.JEJUM -> Color(0xFFC8504A)
+}
+
+/** Entradas da tela Preparo; ficam no App para as receitas usarem o mesmo lote. */
+class PrepState(byKg: Boolean, startEpoch: Long, days: Double, kg: Double) {
+    var byKg by mutableStateOf(byKg)
+    var startEpoch by mutableLongStateOf(startEpoch)
+    var days by mutableDoubleStateOf(days)
+    var kg by mutableDoubleStateOf(kg)
+    val start: LocalDate get() = LocalDate.ofEpochDay(startEpoch)
+
+    fun batch(cfg: Config): Batch = if (byKg) cfg.batchByKg(start, kg) else cfg.batchByDays(start, days.toInt())
+
+    companion object {
+        val Saver = listSaver<PrepState, Any>(
+            save = { listOf(it.byKg, it.startEpoch, it.days, it.kg) },
+            restore = { PrepState(it[0] as Boolean, it[1] as Long, it[2] as Double, it[3] as Double) },
+        )
+    }
 }
 
 class MainActivity : ComponentActivity() {
@@ -149,22 +171,27 @@ fun App() {
     var cfg by remember { mutableStateOf(Storage.load(ctx)) }
     val update: (Config) -> Unit = { cfg = it; Storage.save(ctx, it) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    val prep = rememberSaveable(saver = PrepState.Saver) {
+        PrepState(byKg = false, startEpoch = LocalDate.now().toEpochDay(), days = 15.0, kg = 4.0)
+    }
 
     Scaffold(
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Icons.Default.Kitchen, null) }, label = { Text("Preparo") })
                 NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.Default.CalendarMonth, null) }, label = { Text("Calendário") })
-                NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Default.Lightbulb, null) }, label = { Text("Dicas") })
-                NavigationBarItem(tab == 3, { tab = 3 }, { Icon(Icons.Default.Settings, null) }, label = { Text("Ajustes") })
+                NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Default.RestaurantMenu, null) }, label = { Text("Receitas") })
+                NavigationBarItem(tab == 3, { tab = 3 }, { Icon(Icons.Default.Lightbulb, null) }, label = { Text("Dicas") })
+                NavigationBarItem(tab == 4, { tab = 4 }, { Icon(Icons.Default.Settings, null) }, label = { Text("Ajustes") })
             }
         },
     ) { pad ->
         Box(Modifier.padding(pad).fillMaxSize()) {
             when (tab) {
-                0 -> PrepScreen(cfg)
+                0 -> PrepScreen(cfg, prep)
                 1 -> CalendarScreen(cfg)
-                2 -> TipsScreen()
+                2 -> RecipesScreen(cfg, prep.batch(cfg))
+                3 -> TipsScreen()
                 else -> SettingsScreen(cfg, update)
             }
         }
@@ -172,7 +199,7 @@ fun App() {
 }
 
 @Composable
-private fun ScreenColumn(content: @Composable () -> Unit) {
+internal fun ScreenColumn(content: @Composable () -> Unit) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -180,7 +207,7 @@ private fun ScreenColumn(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
+internal fun Section(title: String, content: @Composable () -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -190,7 +217,7 @@ private fun Section(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun TableRow(vararg cells: String, bold: Boolean = false) {
+internal fun TableRow(vararg cells: String, bold: Boolean = false) {
     Row(Modifier.fillMaxWidth()) {
         cells.forEachIndexed { i, c ->
             Text(
@@ -276,29 +303,25 @@ private fun NumberField(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PrepScreen(cfg: Config) {
-    var byKg by rememberSaveable { mutableStateOf(false) }
-    var startEpoch by rememberSaveable { mutableStateOf(LocalDate.now().toEpochDay()) }
-    var days by rememberSaveable { mutableStateOf(15.0) }
-    var kgIn by rememberSaveable { mutableStateOf(4.0) }
-    val start = LocalDate.ofEpochDay(startEpoch)
-
-    val batch = if (byKg) cfg.batchByKg(start, kgIn) else cfg.batchByDays(start, days.toInt())
+fun PrepScreen(cfg: Config, prep: PrepState) {
+    val byKg = prep.byKg
+    val start = prep.start
+    val batch = prep.batch(cfg)
 
     ScreenColumn {
         TodayBanner(cfg)
 
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            SegmentedButton(!byKg, { byKg = false }, SegmentedButtonDefaults.itemShape(0, 2)) { Text("Por dias") }
-            SegmentedButton(byKg, { byKg = true }, SegmentedButtonDefaults.itemShape(1, 2)) { Text("Por kg") }
+            SegmentedButton(!byKg, { prep.byKg = false }, SegmentedButtonDefaults.itemShape(0, 2)) { Text("Por dias") }
+            SegmentedButton(byKg, { prep.byKg = true }, SegmentedButtonDefaults.itemShape(1, 2)) { Text("Por kg") }
         }
 
-        DateField("Começa em", start) { startEpoch = it.toEpochDay() }
+        DateField("Começa em", start) { prep.startEpoch = it.toEpochDay() }
 
         if (byKg) {
-            NumberField("Quanto vou preparar", kgIn, { kgIn = it }, Modifier.fillMaxWidth(), "kg")
+            NumberField("Quanto vou preparar", prep.kg, { prep.kg = it }, Modifier.fillMaxWidth(), "kg")
         } else {
-            NumberField("Por quantos dias", days, { days = it }, Modifier.fillMaxWidth(), "dias")
+            NumberField("Por quantos dias", prep.days, { prep.days = it }, Modifier.fillMaxWidth(), "dias")
         }
 
         Section(if (byKg) "Quanto tempo dura" else "Quanto preparar") {
@@ -467,7 +490,7 @@ private fun StorageSection(batch: Batch) {
 // ---------------------------------------------------------------- Dicas
 
 @Composable
-private fun Bullets(vararg items: String) {
+internal fun Bullets(vararg items: String) {
     items.forEach { Text("•  $it", style = MaterialTheme.typography.bodyMedium) }
 }
 
@@ -596,13 +619,13 @@ fun TipsScreen() {
     }
 }
 
-private const val SOURCE_URL = "https://cachorroverde.com.br"
+internal const val SOURCE_URL = "https://cachorroverde.com.br"
 private const val REPO_URL = "https://github.com/giovanildo/comida-natural-cadelas"
 private const val GPL_URL = "https://www.gnu.org/licenses/gpl-3.0.html"
 
 /** Texto com um link clicável no fim. */
 @Composable
-private fun LinkText(prefix: String, label: String, url: String, style: ComposeTextStyle = MaterialTheme.typography.bodyMedium) {
+internal fun LinkText(prefix: String, label: String, url: String, style: ComposeTextStyle = MaterialTheme.typography.bodyMedium) {
     val linkStyle = SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)
     Text(
         buildAnnotatedString {

@@ -15,6 +15,15 @@ As regras de alimentação vêm do site Cachorro Verde (<https://cachorroverde.c
 
 ### Adicionado
 
+- Aba Receitas com as 4 sugestões de combinação da dieta cozida do Cachorro
+  Verde, multiplicadas para 1 dia das duas cadelas ou para o lote do Preparo:
+  - Ilustração de cada receita: prato visto de cima, com as fatias na
+    proporção de cada grupo e os ingredientes em emoji.
+  - Peso cozido de cada ingrediente e estimativa de quanto comprar cru.
+  - Ovos em quantidade fixa (1 por cadela por dia, no lugar de 50 g de
+    carne), com o aviso de usar 1 a 2 vezes por semana.
+  - Complementos: suplemento vitamínico-mineral pelo total de comida e óleo
+    pela dose do peso de cada cadela.
 - Este changelog.
 
 ## [1.1] - 2026-09-25
