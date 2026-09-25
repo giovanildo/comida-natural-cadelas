@@ -474,6 +474,7 @@ private fun Bullets(vararg items: String) {
 @Composable
 fun TipsScreen() {
     ScreenColumn {
+        SourceHeader()
         Section("Conservação") {
             Bullets(
                 "Geladeira: comida cozida dura até 3 dias, em pote tampado; crua, até 2 dias. " +
@@ -591,7 +592,7 @@ fun TipsScreen() {
             TableRow("15 a 25 kg", "1 colher de sopa, 1 vez")
             TableRow("25 kg ou mais", "1 colher de sopa, 2 vezes")
         }
-        SourceSection()
+        LicenseSection()
     }
 }
 
@@ -612,22 +613,34 @@ private fun LinkText(prefix: String, label: String, url: String, style: ComposeT
     )
 }
 
+/** Citação da fonte, no topo da aba de dicas. */
 @Composable
-private fun SourceSection() {
-    Section("Fonte e licença") {
-        Text(
-            "As proporções da dieta, as quantidades por peso, idade e castração, as doses de óleo, " +
-                "a conservação, as dicas de preparo e a lista de alimentos tóxicos vêm do site " +
-                "Cachorro Verde — Alimentação Natural pra Cães e Gatos:",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        LinkText("", SOURCE_URL, SOURCE_URL, MaterialTheme.typography.titleSmall)
-        Text(
-            "O conteúdo pertence aos autores do Cachorro Verde; o app só resume e aplica as orientações. " +
-                "Para o texto completo, consulte o site. Nada aqui substitui a orientação de um veterinário.",
-            style = MaterialTheme.typography.bodySmall,
-        )
-        HorizontalDivider()
+private fun SourceHeader() {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Fonte: Cachorro Verde", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "As proporções da dieta, as quantidades por peso, idade e castração, as doses de óleo, " +
+                    "a conservação, as dicas de preparo e a lista de alimentos tóxicos vêm do site " +
+                    "Cachorro Verde — Alimentação Natural pra Cães e Gatos:",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            LinkText("", SOURCE_URL, SOURCE_URL, MaterialTheme.typography.titleSmall)
+            Text(
+                "O conteúdo pertence aos autores do Cachorro Verde; o app só resume e aplica as orientações. " +
+                    "Para o texto completo, consulte o site. Nada aqui substitui a orientação de um veterinário.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+@Composable
+private fun LicenseSection() {
+    Section("Licença") {
         Text(
             "Comida das Cadelas é software livre, sob a GNU General Public License, versão 3 (GPLv3). " +
                 "Copyright (C) 2026 Giovanildo.",
