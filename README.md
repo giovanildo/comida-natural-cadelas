@@ -33,14 +33,15 @@ App Android para planejar a alimentação natural (AN) da Mari e da Poranga.
   dura uma quantidade (por kg). Mostra o peso e o custo de cada ingrediente, a
   porção de cada cadela, o arroz cru e a água, e como conservar o lote.
 - **Calendário:** marca os dias de comida natural, de ração (a cada 5 dias) e de
-  jejum (a cada 15 dias).
+  jejum (a cada 15 dias), e a receita de cada dia pelo rodízio.
 - **Receitas:** as 4 sugestões de combinação da dieta cozida do Cachorro Verde,
   ilustradas e multiplicadas para 1 dia ou para o lote, com o peso cozido e a
   estimativa de compra de cada ingrediente.
-- **Dicas:** conservação, preparo, alimentos tóxicos e a evitar, porção por peso
-  e por idade, e doses de óleo.
-- **Ajustes:** peso, idade e castração de cada cadela, proporções, preços e rotina.
-  Tudo fica salvo no aparelho; o app não acessa a rede.
+- **Dicas:** exames de rotina de cada cadela, conservação, preparo, alimentos
+  tóxicos e a evitar, porção por peso e por idade, complementos e rodízio.
+- **Ajustes:** peso, idade e castração de cada cadela, proporções, preços, rotina,
+  rodízio e o lembrete diário para descongelar. Tudo fica salvo no aparelho; o app
+  não acessa a rede.
 
 ## Como compilar
 

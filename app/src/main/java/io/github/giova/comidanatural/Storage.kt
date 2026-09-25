@@ -33,6 +33,7 @@ object Storage {
                     p.getString("dog_${i}_adult_size", null)
                         ?.let { n -> AdultSize.entries.firstOrNull { it.name == n } } ?: dog.adultSize,
                     p.getBoolean("dog_${i}_neutered", dog.neutered),
+                    p.getString("dog_${i}_checkup", null)?.let(LocalDate::parse) ?: dog.lastCheckup,
                 )
             },
             pctCarne = d("pct_carne", def.pctCarne),
@@ -48,6 +49,9 @@ object Storage {
             jejumEvery = p.getInt("jejum_every", def.jejumEvery),
             cycleStart = p.getString("cycle_start", null)?.let(LocalDate::parse)
                 ?: def.cycleStart.also { save(context, def) },
+            menuEvery = p.getInt("menu_every", def.menuEvery),
+            reminderOn = p.getBoolean("reminder_on", def.reminderOn),
+            reminderMinutes = p.getInt("reminder_minutes", def.reminderMinutes),
         )
     }
 
@@ -60,6 +64,7 @@ object Storage {
             e.putString("dog_${i}_birth", dog.birth?.toString())
             e.putString("dog_${i}_adult_size", dog.adultSize.name)
             e.putBoolean("dog_${i}_neutered", dog.neutered)
+            e.putString("dog_${i}_checkup", dog.lastCheckup?.toString())
         }
         e.putString("pct_carne", c.pctCarne.toString())
         e.putString("pct_visceras", c.pctVisceras.toString())
@@ -73,6 +78,9 @@ object Storage {
         e.putInt("racao_every", c.racaoEvery)
         e.putInt("jejum_every", c.jejumEvery)
         e.putString("cycle_start", c.cycleStart.toString())
+        e.putInt("menu_every", c.menuEvery)
+        e.putBoolean("reminder_on", c.reminderOn)
+        e.putInt("reminder_minutes", c.reminderMinutes)
         e.apply()
     }
 }

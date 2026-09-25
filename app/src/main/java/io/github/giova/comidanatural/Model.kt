@@ -32,6 +32,7 @@ data class Dog(
     val birth: LocalDate? = null,
     val adultSize: AdultSize = AdultSize.MEDIO,
     val neutered: Boolean = false,
+    val lastCheckup: LocalDate? = null,
 ) {
     fun ageMonths(today: LocalDate = LocalDate.now()): Int? =
         birth?.let { ChronoUnit.MONTHS.between(it, today).toInt().coerceAtLeast(0) }
@@ -104,6 +105,42 @@ fun lifeStage(months: Int, porte: Porte): LifeStage {
         else -> LifeStage.ADULTO
     }
 }
+
+/** Exames anuais de rotina para cães jovens e adultos em AN (Cachorro Verde). */
+val EXAMS_BASE = listOf(
+    "Check-up físico com o veterinário (boca e dentes também)",
+    "Coproparasitológico: 2 a 3 amostras de fezes de dias alternados",
+    "Hemograma",
+    "Função renal: ureia e creatinina",
+    "Colesterol total e frações",
+    "Urinálise (urina tipo I)",
+    "Enzimas do fígado: fosfatase alcalina e ALT",
+    "Cálcio ionizado: confere se a dieta caseira dá cálcio suficiente",
+)
+
+/** Exames a mais para meia-idade e idosas. */
+val EXAMS_SENIOR = listOf(
+    "Glicemia em jejum",
+    "Pressão arterial",
+    "Ecodopplercardiograma",
+    "Hormônios da tireoide",
+    "Triglicerídeos, sódio, potássio e fósforo",
+    "Ultrassonografia abdominal",
+)
+
+/** Fase da vida adulta, ou null para filhotes e quando falta peso ou nascimento. */
+fun Dog.stage(today: LocalDate = LocalDate.now()): LifeStage? {
+    if (isPuppy(today)) return null
+    val months = ageMonths(today) ?: return null
+    val p = porte(weightKg) ?: return null
+    return lifeStage(months, p)
+}
+
+/** Idosas: check-up a cada 6 meses; as demais, uma vez por ano. */
+fun Dog.checkupMonths(today: LocalDate = LocalDate.now()): Int = if (stage(today) == LifeStage.IDOSO) 6 else 12
+
+fun Dog.nextCheckup(today: LocalDate = LocalDate.now()): LocalDate? =
+    lastCheckup?.plusMonths(checkupMonths(today).toLong())
 
 /** [pct] é o ponto de partida dentro da faixa; ajuste depois conforme a silhueta. */
 data class Suggestion(
@@ -185,12 +222,50 @@ fun fishOilDose(weightKg: Double): String? = when {
 /** Dose de óleo vegetal (azeite, coco), pelo peso (Cachorro Verde). */
 fun vegetableOilDose(weightKg: Double): String? = when {
     weightKg <= 0 -> null
-    weightKg <= 2 -> "½ colher de chá em 1 refeição"
-    weightKg <= 7 -> "½ colher de chá no almoço e ½ no jantar"
-    weightKg <= 15 -> "1 colher de sobremesa em 1 refeição"
-    weightKg <= 25 -> "1 colher de sopa em 1 refeição"
-    else -> "1 colher de sopa no almoço e 1 no jantar"
+    weightKg <= 5 -> "1 colherinha de café"
+    weightKg <= 15 -> "1 colher de chá"
+    weightKg <= 25 -> "1 colher de sobremesa"
+    weightKg <= 35 -> "1 colher de sopa"
+    else -> "1½ a 2 colheres de sopa"
+}?.let { "$it em 1 refeição" }
+
+/** Iogurte natural integral, coalhada ou kefir, por dia (Cachorro Verde). */
+fun yogurtDose(weightKg: Double): String? = when {
+    weightKg <= 0 -> null
+    weightKg <= 5 -> "1 colher de chá"
+    weightKg <= 10 -> "1 colher de sobremesa"
+    weightKg <= 20 -> "1½ colher de sobremesa"
+    weightKg <= 35 -> "1 a 1½ colher de sopa"
+    else -> "2 colheres de sopa"
 }
+
+/** Alho fresco picadinho, diariamente ou algumas vezes por semana (Cachorro Verde). */
+fun garlicDose(weightKg: Double): String? = when {
+    weightKg <= 0 -> null
+    weightKg <= 5 -> "1 lâmina de 0,5 cm"
+    weightKg <= 10 -> "1 lâmina de 1 cm"
+    weightKg <= 25 -> "¼ de dente médio"
+    else -> "½ dente"
+}
+
+/**
+ * Suplemento vitamínico-mineral por dia, para [foodG] gramas de comida (Cachorro Verde):
+ * Food Dog 1 g/100 g para adultas e idosas, 3 g/100 g para filhotes;
+ * Nutroplus 0,6 g/100 g para adultas e idosas, 1,5 g/100 g para filhotes.
+ */
+data class SupplementDose(val version: String, val foodDogG: Double, val nutroplusG: Double)
+
+fun supplementDose(dog: Dog, foodG: Double): SupplementDose {
+    val puppy = dog.isPuppy()
+    val senior = !puppy && dog.ageMonths()?.let { m -> porte(dog.weightKg)?.let { m >= seniorYears(it) * 12 } } == true
+    val version = when {
+        puppy -> "Crescimento"
+        senior -> "Sênior"
+        else -> "Manutenção"
+    }
+    return SupplementDose(version, foodG * (if (puppy) 3.0 else 1.0) / 100, foodG * (if (puppy) 1.5 else 0.6) / 100)
+}
+
 
 data class Meat(val name: String, val pricePerKg: Double)
 
@@ -219,6 +294,10 @@ data class Config(
     val jejumEvery: Int = 15,
     // Dia 1 do ciclo: a ração cai nos dias 5, 10... e o jejum no dia 15.
     val cycleStart: LocalDate = LocalDate.now(),
+    // Rodízio: troca de receita a cada tantos dias de comida natural (3 = um pote de geladeira).
+    val menuEvery: Int = 3,
+    val reminderOn: Boolean = false,
+    val reminderMinutes: Int = 20 * 60,
 ) {
     val dailyKg: Double get() = dogs.sumOf { it.kgPerDay }
 
@@ -243,6 +322,26 @@ data class Config(
         if (jejumEvery > 0 && Math.floorMod(n, jejumEvery.toLong()) == 0L) return DayType.JEJUM
         if (racaoEvery > 0 && Math.floorMod(n, racaoEvery.toLong()) == 0L) return DayType.RACAO
         return DayType.NATURAL
+    }
+
+    /** Quantos dias de comida natural há num período completo de ração e jejum. */
+    private val period: Int get() = lcm(racaoEvery.coerceAtLeast(1), jejumEvery.coerceAtLeast(1))
+    private val naturalPerPeriod: Int
+        get() = (0 until period).count { dayType(cycleStart.plusDays(it.toLong())) == DayType.NATURAL }
+
+    /**
+     * Receita do rodízio (índice em RECIPES) para [date], ou null se não é dia de comida natural.
+     * Conta os dias de comida natural desde o dia 1 do ciclo e troca a cada [menuEvery].
+     */
+    fun recipeIndex(date: LocalDate, recipes: Int = 4): Int? {
+        if (dayType(date) != DayType.NATURAL || recipes <= 0) return null
+        val d = ChronoUnit.DAYS.between(cycleStart, date)
+        val whole = Math.floorDiv(d, period.toLong())
+        val periodStart = cycleStart.plusDays(whole * period)
+        val inPeriod = (0 until Math.floorMod(d, period.toLong()).toInt())
+            .count { dayType(periodStart.plusDays(it.toLong())) == DayType.NATURAL }
+        val n = whole * naturalPerPeriod + inPeriod
+        return Math.floorMod(Math.floorDiv(n, menuEvery.coerceAtLeast(1).toLong()), recipes.toLong()).toInt()
     }
 
     fun next(type: DayType, from: LocalDate): LocalDate? =
@@ -285,6 +384,9 @@ data class Config(
         return Batch(start, last, cal, nat, rac, jej, kg, remaining.coerceAtLeast(0.0))
     }
 }
+
+private fun gcd(a: Int, b: Int): Int = if (b == 0) a else gcd(b, a % b)
+private fun lcm(a: Int, b: Int): Int = a / gcd(a, b) * b
 
 data class Ingredient(val name: String, val pct: Double, val pricePerKg: Double)
 

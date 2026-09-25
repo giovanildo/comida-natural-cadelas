@@ -8,6 +8,19 @@ As regras de alimentação vêm do site Cachorro Verde (<https://cachorroverde.c
 
 ## [Não lançado]
 
+## [1.2] - 2026-09-25
+
+### Corrigido
+
+- Dose de óleo vegetal pelo peso, conforme o texto do Cachorro Verde: para
+  15 a 25 kg é 1 colher de sobremesa (antes: 1 colher de sopa). Faixas:
+  até 5 kg, 5 a 15, 15 a 25, 25 a 35 e acima de 35 kg.
+- Dose do suplemento: Food Dog 1 g a cada 100 g de comida para adultas e
+  idosas e 3 g para filhotes; Nutroplus 0,6 g e 1,5 g. Mostra a versão da
+  fase (Manutenção, Sênior ou Crescimento).
+- Conservação: congelador até 45 dias (com legumes, até 30), descongelar em
+  12 a 18 horas e nunca congelar ovos.
+
 ### Alterado
 
 - A citação da fonte (Cachorro Verde, com link) passou a ser o cabeçalho da aba
@@ -15,6 +28,16 @@ As regras de alimentação vêm do site Cachorro Verde (<https://cachorroverde.c
 
 ### Adicionado
 
+- Complementos do dia no cartão de cada cadela: suplemento, óleo vegetal,
+  óleo de peixe, iogurte ou kefir, alho e sal, com as doses pelo peso.
+- Rodízio de receitas: troca de receita a cada 3 dias de comida natural
+  (ajustável). A receita do dia aparece no topo e no calendário, a aba Receitas
+  abre nela e, no modo lote, cada receita cobre os seus dias do lote.
+- Lembrete diário opcional para tirar do congelador a porção do dia seguinte,
+  que também avisa quando amanhã é dia de ração ou de jejum.
+- Exames de rotina de cada cadela, conforme a fase, com a data do último
+  check-up e quando vence o próximo (idosas a cada 6 meses).
+- Aba Dicas: tabelas de todos os complementos e regras do rodízio.
 - Aba Receitas com as 4 sugestões de combinação da dieta cozida do Cachorro
   Verde, multiplicadas para 1 dia das duas cadelas ou para o lote do Preparo:
   - Ilustração de cada receita: prato visto de cima, com as fatias na
@@ -71,6 +94,7 @@ As regras de alimentação vêm do site Cachorro Verde (<https://cachorroverde.c
   aparelho.
 - Licença GPLv3.
 
-[Não lançado]: https://github.com/giovanildo/comida-natural-cadelas/compare/972cdc8...HEAD
+[Não lançado]: https://github.com/giovanildo/comida-natural-cadelas/compare/v1.2...HEAD
+[1.2]: https://github.com/giovanildo/comida-natural-cadelas/compare/972cdc8...v1.2
 [1.1]: https://github.com/giovanildo/comida-natural-cadelas/compare/8ac452a...972cdc8
 [1.0]: https://github.com/giovanildo/comida-natural-cadelas/commit/8ac452a

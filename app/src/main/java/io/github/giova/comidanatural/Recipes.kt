@@ -60,6 +60,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.LocalDate
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -202,10 +203,16 @@ private fun weight(grams: Double): String = if (grams >= 1000) kg(grams / 1000) 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecipesScreen(cfg: Config, batch: Batch) {
-    var selected by rememberSaveable { mutableIntStateOf(0) }
+    val today = LocalDate.now()
+    var selected by rememberSaveable { mutableIntStateOf(cfg.recipeIndex(today) ?: 0) }
     var forBatch by rememberSaveable { mutableStateOf(false) }
     val recipe = RECIPES[selected]
-    val totalG = (if (forBatch) batch.totalKg else cfg.dailyKg) * 1000
+    // Dias de comida natural do lote, com a receita que o rodízio dá a cada um.
+    val batchDays = (0 until batch.calendarDays).map { batch.start.plusDays(it.toLong()) }
+        .mapNotNull { d -> cfg.recipeIndex(d)?.let { d to it } }
+        .take(batch.naturalDays)
+    val daysOfRecipe = batchDays.count { it.second == selected }
+    val totalG = (if (forBatch) daysOfRecipe * cfg.dailyKg else cfg.dailyKg) * 1000
 
     ScreenColumn {
         RecipeSourceHeader()
@@ -229,8 +236,11 @@ fun RecipesScreen(cfg: Config, batch: Batch) {
         }
         Text(
             if (forBatch) {
-                "Lote de ${kg(batch.totalKg)}: ${batch.naturalDays} dias de comida, " +
-                    "de ${batch.start.format(shortFmt)} a ${batch.end.format(shortFmt)}. Mude o lote na aba Preparo."
+                "Lote de ${batch.naturalDays} dias de comida, de ${batch.start.format(shortFmt)} a " +
+                    "${batch.end.format(shortFmt)}. Pelo rodízio, a ${recipe.title} fica com $daysOfRecipe " +
+                    "${if (daysOfRecipe == 1) "dia" else "dias"} (${kg(totalG / 1000)}). Por receita: " +
+                    RECIPES.indices.joinToString(" · ") { i -> "${RECIPES[i].title} ${batchDays.count { it.second == i }}" } +
+                    ". Some as 4 para a compra do lote; mude o lote na aba Preparo."
             } else {
                 "Um dia das duas: ${kg(cfg.dailyKg)} (" + cfg.dogs.joinToString(" + ") { "${it.name} ${g(it.kgPerDay)}" } + ")."
             },
@@ -408,11 +418,9 @@ private fun RecipeIngredients(recipe: Recipe, cfg: Config, totalG: Double, forBa
         if (recipe.items.any { it.perDogPerDay != null }) {
             Text(
                 "Ovo: 1 por cadela por dia, no lugar de 50 g de carne. O Cachorro Verde recomenda ovo " +
-                    "1 a 2 vezes por semana (tudo bem 3); cães grandes podem comer até 2 por refeição. " +
-                    if (forBatch) "Use esta receita só nesses dias, não no lote inteiro." else "",
+                    "1 a 2 vezes por semana (tudo bem 3). Nunca congele ovos: cozinhe e junte no dia de servir.",
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold,
-                color = if (forBatch) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
             )
         }
         Text(
@@ -427,22 +435,27 @@ private fun RecipeIngredients(recipe: Recipe, cfg: Config, totalG: Double, forBa
 @Composable
 private fun RecipeComplements(recipe: Recipe, cfg: Config, totalG: Double) {
     Section("Complementos") {
-        Text("Obrigatórios", style = MaterialTheme.typography.labelLarge)
-        Bullets(
-            "Suplemento vitamínico-mineral: ${num(totalG * 3 / RECIPE_BASE_G, 0)} g de Food Dog " +
-                "ou ${num(totalG * 2 / RECIPE_BASE_G, 0)} g de Nutroplus.",
-            "Óleo: ${recipe.oil}, na dose do peso de cada cadela, por dia:",
-        )
+        Text("Suplemento vitamínico-mineral, para esta quantidade", style = MaterialTheme.typography.labelLarge)
         cfg.dogs.forEach { dog ->
-            val dose = vegetableOilDose(dog.weightKg) ?: "informe o peso nos Ajustes"
-            Text("      ${dog.name}: $dose", style = MaterialTheme.typography.bodyMedium)
+            val share = if (cfg.dailyKg > 0) dog.kgPerDay / cfg.dailyKg else 0.0
+            val sup = supplementDose(dog, totalG * share)
+            Text(
+                "•  ${dog.name}: ${num(sup.foodDogG, 1)} g de Food Dog ${sup.version} " +
+                    "ou ${num(sup.nutroplusG, 1)} g de Nutroplus ${sup.version}",
+                style = MaterialTheme.typography.bodyMedium,
+            )
         }
-        Text("Opcionais", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
-        Bullets(
-            "Iogurte natural ou kefir.",
-            "Uma pitada de sal integral (sal marinho).",
-            "Uma lâmina de alho fresco picadinho.",
-            "Óleo de peixe (dose no cartão de cada cadela, na aba Preparo).",
+        Text("Óleo: ${recipe.oil}, por dia", style = MaterialTheme.typography.labelLarge)
+        cfg.dogs.forEach { dog ->
+            Text(
+                "•  ${dog.name}: " + (vegetableOilDose(dog.weightKg) ?: "informe o peso nos Ajustes"),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        Text(
+            "Os complementos entram na hora de servir. Opcionais (óleo de peixe, iogurte, alho, sal) " +
+                "e as doses de cada cadela estão no cartão dela, na aba Preparo.",
+            style = MaterialTheme.typography.bodySmall,
         )
     }
 }

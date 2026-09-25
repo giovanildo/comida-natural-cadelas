@@ -13,6 +13,17 @@
 package io.github.giova.comidanatural
 
 import android.os.Build
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Switch
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -169,7 +180,13 @@ fun AppTheme(content: @Composable () -> Unit) {
 fun App() {
     val ctx = LocalContext.current
     var cfg by remember { mutableStateOf(Storage.load(ctx)) }
-    val update: (Config) -> Unit = { cfg = it; Storage.save(ctx, it) }
+    val update: (Config) -> Unit = {
+        val reschedule = it.reminderOn != cfg.reminderOn || it.reminderMinutes != cfg.reminderMinutes
+        cfg = it
+        Storage.save(ctx, it)
+        if (reschedule) Reminders.schedule(ctx, it)
+    }
+    LaunchedEffect(Unit) { Reminders.schedule(ctx, cfg) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val prep = rememberSaveable(saver = PrepState.Saver) {
         PrepState(byKg = false, startEpoch = LocalDate.now().toEpochDay(), days = 15.0, kg = 4.0)
@@ -191,7 +208,7 @@ fun App() {
                 0 -> PrepScreen(cfg, prep)
                 1 -> CalendarScreen(cfg)
                 2 -> RecipesScreen(cfg, prep.batch(cfg))
-                3 -> TipsScreen()
+                3 -> TipsScreen(cfg, update)
                 else -> SettingsScreen(cfg, update)
             }
         }
@@ -242,6 +259,13 @@ private fun TodayBanner(cfg: Config) {
         Column(Modifier.padding(16.dp)) {
             Text("Hoje, ${today.format(dayFmt)}", style = MaterialTheme.typography.labelLarge)
             Text(t.label, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            cfg.recipeIndex(today)?.let { i ->
+                val r = RECIPES[i]
+                Text(
+                    "Receita do rodízio: ${r.items.first().emoji} ${r.title} — ${r.summary.lowercase()}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             val nr = cfg.next(DayType.RACAO, today.plusDays(1))
             val nj = cfg.next(DayType.JEJUM, today.plusDays(1))
             Text(
@@ -460,24 +484,45 @@ private fun DogsSection(cfg: Config, batch: Batch) {
             cfg.ingredients.forEach { i ->
                 TableRow(i.name, g(dog.kgPerDay * cfg.share(i)), kg(batch.totalKg * dogShare * cfg.share(i)))
             }
-            val fish = fishOilDose(dog.weightKg)
-            val veg = vegetableOilDose(dog.weightKg)
-            if (fish != null && veg != null) {
-                HorizontalDivider()
-                Text("Óleos (pelo peso de ${kg(dog.weightKg)})", style = MaterialTheme.typography.labelLarge)
-                Text("Óleo de peixe: $fish", style = MaterialTheme.typography.bodyMedium)
-                Text("Óleo vegetal (azeite, coco): $veg", style = MaterialTheme.typography.bodyMedium)
-            }
+            HorizontalDivider()
+            DogComplements(dog)
         }
     }
+}
+
+/** Complementos do dia de uma cadela, pelo peso e pela idade (Cachorro Verde). */
+@Composable
+internal fun DogComplements(dog: Dog, oil: String = "azeite, óleo de coco ou de linhaça") {
+    val sup = supplementDose(dog, dog.kgPerDay * 1000)
+    Text("Complementos do dia", style = MaterialTheme.typography.labelLarge)
+    Text("Obrigatórios", style = MaterialTheme.typography.labelMedium)
+    Bullets(
+        "Suplemento: ${num(sup.foodDogG, 1)} g de Food Dog ${sup.version} ou " +
+            "${num(sup.nutroplusG, 1)} g de Nutroplus ${sup.version}, misturado ao total do dia.",
+        "Óleo vegetal ($oil): " + (vegetableOilDose(dog.weightKg) ?: "informe o peso nos Ajustes") + ".",
+    )
+    if (dog.weightKg > 0) {
+        Text("Opcionais (diariamente ou algumas vezes por semana)", style = MaterialTheme.typography.labelMedium)
+        Bullets(
+            "Óleo de peixe: ${fishOilDose(dog.weightKg)}.",
+            "Iogurte natural integral, coalhada ou kefir: ${yogurtDose(dog.weightKg)}.",
+            "Alho cru picadinho: ${garlicDose(dog.weightKg)}; espere 5 minutos antes de servir.",
+            "Sal integral: uma pitadinha.",
+        )
+    }
+    Text(
+        "Coloque na hora de servir: só o óleo de coco, o suplemento e o sal aguentam o congelamento. " +
+            "Suspenda alho e óleo de peixe em caso de anemia, perto de cirurgias ou com remédios que afinam o sangue.",
+        style = MaterialTheme.typography.bodySmall,
+    )
 }
 
 @Composable
 private fun StorageSection(batch: Batch) {
     Section("Conservação") {
         Text("Geladeira: comida cozida até 3 dias, em pote tampado; crua até 2 dias.", style = MaterialTheme.typography.bodyMedium)
-        Text("Congelador: o ideal é usar em 30 a 45 dias.", style = MaterialTheme.typography.bodyMedium)
-        Text("Descongele na parte de baixo da geladeira: leva de 12 a 36 horas.", style = MaterialTheme.typography.bodyMedium)
+        Text("Congelador: até 45 dias; com legumes, o ideal é até 30. Nunca congele ovos.", style = MaterialTheme.typography.bodyMedium)
+        Text("Descongele uma porção por dia na parte de baixo da geladeira: leva de 12 a 18 horas.", style = MaterialTheme.typography.bodyMedium)
         if (batch.naturalDays > 3) {
             Text(
                 "Este lote dá ${batch.naturalDays} dias de comida: deixe até 3 dias na geladeira e congele o resto.",
@@ -495,16 +540,19 @@ internal fun Bullets(vararg items: String) {
 }
 
 @Composable
-fun TipsScreen() {
+fun TipsScreen(cfg: Config, update: (Config) -> Unit) {
     ScreenColumn {
         SourceHeader()
+        ExamsSection(cfg, update)
         Section("Conservação") {
             Bullets(
                 "Geladeira: comida cozida dura até 3 dias, em pote tampado; crua, até 2 dias. " +
                     "Depois disso começa a estragar, e nem sempre dá para perceber.",
-                "Congelador: o ideal é usar em 30 a 45 dias.",
-                "Descongele na parte de baixo da geladeira (12 a 36 horas). " +
-                    "Para aquecer, no máximo em banho-maria, para preservar as vitaminas.",
+                "Congelador: até 45 dias. Carnes e vísceras aguentam melhor; com legumes, o ideal é até 30 dias.",
+                "Nunca congele ovos: cozinhe e junte no dia de servir.",
+                "Tire uma porção por dia do congelador e deixe na parte de baixo da geladeira: descongela " +
+                    "em 12 a 18 horas. Não descongele na bancada nem congele de novo o que já descongelou.",
+                "Para aquecer, no máximo em banho-maria, para preservar as vitaminas.",
             )
         }
         Section("Preparo") {
@@ -603,17 +651,55 @@ fun TipsScreen() {
                 "Muito ativas comem mais; no verão pode reduzir um pouco e no inverno aumentar.",
             )
         }
-        Section("Óleos") {
-            Text("Óleo de peixe (todo dia ou 3 vezes por semana)", style = MaterialTheme.typography.labelLarge)
+        Section("Complementos") {
+            Text("Suplemento vitamínico-mineral (obrigatório, todo dia)", style = MaterialTheme.typography.labelLarge)
+            TableRow("", "Food Dog", "Nutroplus", bold = true)
+            TableRow("Adulta ou idosa", "1 g/100 g", "0,6 g/100 g")
+            TableRow("Filhote", "3 g/100 g", "1,5 g/100 g")
+            Text(
+                "Use a versão da fase (Manutenção, Sênior ou Crescimento). Comece com ¼ da dose e aumente " +
+                    "¼ a cada 5 dias, até a dose cheia no 16º dia.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text("Óleo vegetal (obrigatório, em 1 refeição)", style = MaterialTheme.typography.labelLarge)
+            TableRow("Até 5 kg", "1 colherinha de café")
+            TableRow("5 a 15 kg", "1 colher de chá")
+            TableRow("15 a 25 kg", "1 colher de sobremesa")
+            TableRow("25 a 35 kg", "1 colher de sopa")
+            TableRow("35 kg ou mais", "1½ a 2 colheres de sopa")
+            Text("Azeite extravirgem, óleo de coco ou de linhaça; se puder, alterne um por dia.", style = MaterialTheme.typography.bodySmall)
+            Text("Óleo de peixe (opcional, todo dia ou 3 vezes por semana)", style = MaterialTheme.typography.labelLarge)
             TableRow("Até 5 kg", "1 cápsula de 500 mg")
             TableRow("5 a 20 kg", "1 cápsula de 1 g")
             TableRow("Mais de 20 kg", "2 cápsulas de 2 g")
-            Text("Óleo vegetal (azeite, coco)", style = MaterialTheme.typography.labelLarge)
-            TableRow("Até 2 kg", "½ colher de chá, 1 vez")
-            TableRow("3 a 7 kg", "½ colher de chá, 2 vezes")
-            TableRow("8 a 15 kg", "1 colher de sobremesa, 1 vez")
-            TableRow("15 a 25 kg", "1 colher de sopa, 1 vez")
-            TableRow("25 kg ou mais", "1 colher de sopa, 2 vezes")
+            Text("Sardinha ou cavalinha 2 a 3 vezes por semana dispensam a cápsula.", style = MaterialTheme.typography.bodySmall)
+            Text("Iogurte, coalhada ou kefir (opcional, por dia)", style = MaterialTheme.typography.labelLarge)
+            TableRow("Até 5 kg", "1 colher de chá")
+            TableRow("5 a 10 kg", "1 colher de sobremesa")
+            TableRow("10 a 20 kg", "1½ colher de sobremesa")
+            TableRow("20 a 35 kg", "1 a 1½ colher de sopa")
+            TableRow("35 kg ou mais", "2 colheres de sopa")
+            Text("Alho cru picadinho (opcional)", style = MaterialTheme.typography.labelLarge)
+            TableRow("Até 5 kg", "1 lâmina de 0,5 cm")
+            TableRow("5 a 10 kg", "1 lâmina de 1 cm")
+            TableRow("10 a 25 kg", "¼ de dente médio")
+            TableRow("25 kg ou mais", "½ dente")
+            Text(
+                "Sal integral: uma pitadinha. Os complementos entram na hora de servir; só o óleo de coco, " +
+                    "o suplemento e o sal aguentam o congelamento.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        Section("Rodízio") {
+            Bullets(
+                "Pelo menos 3 espécies de carne com regularidade (ex.: frango, boi e peixe).",
+                "Troque de receita pelo menos uma vez por semana.",
+                "Ovo 1 a 2 vezes por semana (tudo bem 3), no lugar de 50 g de carne.",
+                "Coração algumas vezes por semana: conta como carne e repõe ferro, taurina e coenzima Q10.",
+                "Sardinha ou cavalinha 2 a 3 vezes por semana; atum no máximo 1 vez por mês.",
+                "Fígado é a víscera mais importante: varie entre o de boi e o de frango.",
+                "Uma novidade por vez, a cada 2 ou 3 dias, para saber o que fez mal se algo fizer.",
+            )
         }
         LicenseSection()
     }
@@ -774,12 +860,15 @@ private fun DayCell(date: LocalDate, cfg: Config, today: LocalDate, modifier: Mo
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                "${date.dayOfMonth}",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isToday || t != DayType.NATURAL) FontWeight.Bold else null,
-                color = if (t == DayType.NATURAL) MaterialTheme.colorScheme.onSurface else Color.White,
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "${date.dayOfMonth}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isToday || t != DayType.NATURAL) FontWeight.Bold else null,
+                    color = if (t == DayType.NATURAL) MaterialTheme.colorScheme.onSurface else Color.White,
+                )
+                cfg.recipeIndex(date)?.let { Text(RECIPES[it].items.first().emoji, fontSize = 11.sp) }
+            }
         }
     }
 }
@@ -890,6 +979,15 @@ fun SettingsScreen(cfg: Config, update: (Config) -> Unit) {
                     NumberField("Jejum a cada", cfg.jejumEvery.toDouble(), { update(cfg.copy(jejumEvery = it.toInt())) }, Modifier.weight(1f), "dias")
                 }
                 DateField("Dia 1 do ciclo", cfg.cycleStart) { update(cfg.copy(cycleStart = it)) }
+                NumberField(
+                    "Trocar de receita a cada", cfg.menuEvery.toDouble(),
+                    { if (it >= 1) update(cfg.copy(menuEvery = it.toInt())) }, Modifier.fillMaxWidth(), "dias de comida",
+                )
+                Text(
+                    "O rodízio passa pelas 4 receitas na ordem, contando só os dias de comida natural. " +
+                        "3 dias é o que cabe num pote de geladeira.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 Text(
                     "Com o dia 1 em ${cfg.cycleStart.format(shortFmt)}: " +
                         "ração em ${cfg.cycleStart.plusDays(cfg.racaoEvery - 1L).format(shortFmt)}, " +
@@ -898,11 +996,108 @@ fun SettingsScreen(cfg: Config, update: (Config) -> Unit) {
                 )
             }
 
+            ReminderSection(cfg, update)
+
             OutlinedButton(
                 onClick = { update(Config(cycleStart = cfg.cycleStart)); resetKey++ },
                 Modifier.fillMaxWidth(),
             ) { Text("Restaurar valores padrão") }
             Spacer(Modifier.height(8.dp))
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReminderSection(cfg: Config, update: (Config) -> Unit) {
+    val ctx = LocalContext.current
+    var pickTime by remember { mutableStateOf(false) }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) update(cfg.copy(reminderOn = true))
+    }
+    Section("Lembrete para descongelar") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Avisar todo dia para tirar do congelador a porção de amanhã",
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Switch(
+                checked = cfg.reminderOn,
+                onCheckedChange = { on ->
+                    val needs = on && Build.VERSION.SDK_INT >= 33 &&
+                        ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) !=
+                        PackageManager.PERMISSION_GRANTED
+                    if (needs) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    else update(cfg.copy(reminderOn = on))
+                },
+            )
+        }
+        val h = cfg.reminderMinutes / 60
+        val m = cfg.reminderMinutes % 60
+        OutlinedButton(onClick = { pickTime = true }, Modifier.fillMaxWidth(), enabled = cfg.reminderOn) {
+            Text("Horário: %02d:%02d".format(h, m))
+        }
+        Text(
+            "Descongelar na parte de baixo da geladeira leva de 12 a 18 horas. O aviso também diz quando " +
+                "amanhã é dia de ração ou de jejum.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+    if (pickTime) {
+        val state = rememberTimePickerState(cfg.reminderMinutes / 60, cfg.reminderMinutes % 60, is24Hour = true)
+        AlertDialog(
+            onDismissRequest = { pickTime = false },
+            confirmButton = {
+                TextButton({
+                    update(cfg.copy(reminderMinutes = state.hour * 60 + state.minute))
+                    pickTime = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton({ pickTime = false }) { Text("Cancelar") } },
+            text = { TimePicker(state) },
+        )
+    }
+}
+
+/** Exames de rotina de cada cadela, conforme a fase, com a data do último check-up. */
+@Composable
+private fun ExamsSection(cfg: Config, update: (Config) -> Unit) {
+    val today = LocalDate.now()
+    Section("Exames de rotina") {
+        cfg.dogs.forEachIndexed { i, dog ->
+            if (i > 0) HorizontalDivider(Modifier.padding(vertical = 4.dp))
+            val stage = dog.stage(today)
+            Text(
+                dog.name + (stage?.let { " · ${it.label.lowercase()}" } ?: ""),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            DateField(
+                "Último check-up", dog.lastCheckup,
+                text = dog.lastCheckup?.let { "Último check-up: ${it.format(shortYearFmt)}" }
+                    ?: "Último check-up: não informado",
+            ) { d -> update(cfg.copy(dogs = cfg.dogs.toMutableList().also { it[i] = it[i].copy(lastCheckup = d) })) }
+            val next = dog.nextCheckup(today)
+            val every = if (dog.checkupMonths(today) == 6) "a cada 6 meses" else "uma vez por ano"
+            Text(
+                when {
+                    next == null -> "Check-up $every. Informe a data do último para ver quando é o próximo."
+                    next.isBefore(today) -> "Check-up atrasado: vencia em ${next.format(shortYearFmt)} ($every)."
+                    else -> "Próximo check-up até ${next.format(shortYearFmt)} ($every)."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = if (next != null && next.isBefore(today)) FontWeight.SemiBold else null,
+                color = if (next != null && next.isBefore(today)) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurface,
+            )
+            val extra = stage == LifeStage.MEIA_IDADE || stage == LifeStage.IDOSO
+            Bullets(*(if (extra) EXAMS_BASE + EXAMS_SENIOR else EXAMS_BASE).toTypedArray())
+        }
+        Text(
+            "Lista do Cachorro Verde para cães em alimentação natural. Meia-idade e idosas incluem os " +
+                "exames a mais; o veterinário pode pedir outros.",
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
