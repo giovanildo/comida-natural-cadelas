@@ -15,7 +15,8 @@ object Storage {
                 Dog(
                     p.getString("dog_${i}_name", null) ?: dog.name,
                     d("dog_${i}_kg", dog.kgPerDay),
-                    d("dog_${i}_weight", dog.weightKg),
+                    // 0 era o valor salvo antes de o peso ter padrão: trata como não informado.
+                    d("dog_${i}_weight", 0.0).takeIf { it > 0 } ?: dog.weightKg,
                     p.getString("dog_${i}_birth", null)?.let(LocalDate::parse) ?: dog.birth,
                     p.getString("dog_${i}_adult_size", null)
                         ?.let { n -> AdultSize.entries.firstOrNull { it.name == n } } ?: dog.adultSize,

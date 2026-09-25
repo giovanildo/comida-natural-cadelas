@@ -184,8 +184,8 @@ data class Meat(val name: String, val pricePerKg: Double)
 
 data class Config(
     val dogs: List<Dog> = listOf(
-        Dog("Mari", 0.4, birth = LocalDate.of(2015, 4, 1)),
-        Dog("Poranga", 0.8, birth = LocalDate.of(2021, 3, 1)),
+        Dog("Mari", 0.4, weightKg = 22.0, birth = LocalDate.of(2015, 4, 1)),
+        Dog("Poranga", 0.8, weightKg = 22.0, birth = LocalDate.of(2021, 3, 1)),
     ),
     val pctCarne: Double = 30.0,
     val pctVisceras: Double = 5.0,
