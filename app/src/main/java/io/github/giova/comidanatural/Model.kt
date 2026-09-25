@@ -1,3 +1,15 @@
+/*
+ * Comida das Cadelas
+ * Copyright (C) 2026 Giovanildo
+ *
+ * Este programa é software livre: você pode redistribuí-lo e/ou modificá-lo
+ * sob os termos da GNU General Public License, versão 3, publicada pela Free
+ * Software Foundation. Distribuído sem nenhuma garantia. Veja o arquivo
+ * LICENSE ou <https://www.gnu.org/licenses/gpl-3.0.html>.
+ *
+ * SPDX-License-Identifier: GPL-3.0-only
+ */
+
 package io.github.giova.comidanatural
 
 import java.time.LocalDate

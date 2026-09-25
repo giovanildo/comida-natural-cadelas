@@ -1,3 +1,15 @@
+/*
+ * Comida das Cadelas
+ * Copyright (C) 2026 Giovanildo
+ *
+ * Este programa é software livre: você pode redistribuí-lo e/ou modificá-lo
+ * sob os termos da GNU General Public License, versão 3, publicada pela Free
+ * Software Foundation. Distribuído sem nenhuma garantia. Veja o arquivo
+ * LICENSE ou <https://www.gnu.org/licenses/gpl-3.0.html>.
+ *
+ * SPDX-License-Identifier: GPL-3.0-only
+ */
+
 package io.github.giova.comidanatural
 
 import android.os.Build
@@ -69,7 +81,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.TextStyle as ComposeTextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -572,11 +591,50 @@ fun TipsScreen() {
             TableRow("15 a 25 kg", "1 colher de sopa, 1 vez")
             TableRow("25 kg ou mais", "1 colher de sopa, 2 vezes")
         }
+        SourceSection()
+    }
+}
+
+private const val SOURCE_URL = "https://cachorroverde.com.br"
+private const val REPO_URL = "https://github.com/giovanildo/comida-natural-cadelas"
+private const val GPL_URL = "https://www.gnu.org/licenses/gpl-3.0.html"
+
+/** Texto com um link clicável no fim. */
+@Composable
+private fun LinkText(prefix: String, label: String, url: String, style: ComposeTextStyle = MaterialTheme.typography.bodyMedium) {
+    val linkStyle = SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)
+    Text(
+        buildAnnotatedString {
+            append(prefix)
+            withLink(LinkAnnotation.Url(url, TextLinkStyles(linkStyle))) { append(label) }
+        },
+        style = style,
+    )
+}
+
+@Composable
+private fun SourceSection() {
+    Section("Fonte e licença") {
         Text(
-            "Fonte: cachorroverde.com.br (dieta cozida para cães, pet idoso, conservação e alimentos tóxicos). " +
-                "Não substitui a orientação de um veterinário.",
+            "As proporções da dieta, as quantidades por peso, idade e castração, as doses de óleo, " +
+                "a conservação, as dicas de preparo e a lista de alimentos tóxicos vêm do site " +
+                "Cachorro Verde — Alimentação Natural pra Cães e Gatos:",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        LinkText("", SOURCE_URL, SOURCE_URL, MaterialTheme.typography.titleSmall)
+        Text(
+            "O conteúdo pertence aos autores do Cachorro Verde; o app só resume e aplica as orientações. " +
+                "Para o texto completo, consulte o site. Nada aqui substitui a orientação de um veterinário.",
             style = MaterialTheme.typography.bodySmall,
         )
+        HorizontalDivider()
+        Text(
+            "Comida das Cadelas é software livre, sob a GNU General Public License, versão 3 (GPLv3). " +
+                "Copyright (C) 2026 Giovanildo.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        LinkText("Licença: ", "GPLv3", GPL_URL, MaterialTheme.typography.bodySmall)
+        LinkText("Código-fonte: ", "github.com/giovanildo/comida-natural-cadelas", REPO_URL, MaterialTheme.typography.bodySmall)
     }
 }
 
