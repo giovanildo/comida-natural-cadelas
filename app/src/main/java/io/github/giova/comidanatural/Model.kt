@@ -9,8 +9,144 @@ enum class DayType(val label: String) {
     JEJUM("Jejum"),
 }
 
-/** [weightKg] é o peso ideal; 0 quando ainda não foi informado. */
-data class Dog(val name: String, val kgPerDay: Double, val weightKg: Double = 0.0)
+/**
+ * [weightKg] é o peso ideal do adulto, ou o peso atual do filhote; 0 quando não informado.
+ * [adultSize] só importa para filhotes: a tabela deles depende do porte que terão adultos.
+ */
+data class Dog(
+    val name: String,
+    val kgPerDay: Double,
+    val weightKg: Double = 0.0,
+    val birth: LocalDate? = null,
+    val adultSize: AdultSize = AdultSize.MEDIO,
+    val neutered: Boolean = false,
+) {
+    fun ageMonths(today: LocalDate = LocalDate.now()): Int? =
+        birth?.let { ChronoUnit.MONTHS.between(it, today).toInt().coerceAtLeast(0) }
+
+    fun isPuppy(today: LocalDate = LocalDate.now()): Boolean =
+        ageMonths(today)?.let { it < adultSize.adultMonths } ?: false
+}
+
+/**
+ * Porte que o filhote terá adulto e com quantos meses ele termina de crescer:
+ * pequenos por volta dos 12 meses, médios e grandes aos 18, gigantes aos 24.
+ */
+enum class AdultSize(val label: String, val range: String, val adultMonths: Int) {
+    PEQUENO("Pequeno", "até 10 kg", 12),
+    MEDIO("Médio", "10 a 25 kg", 18),
+    GRANDE("Grande", "25 a 35 kg", 18),
+    GIGANTE("Gigante", "mais de 35 kg", 24),
+}
+
+/** Faixa de % do peso atual para filhotes, por idade e porte adulto (Cachorro Verde). */
+fun puppyPct(months: Int, size: AdultSize): Pair<Double, Double>? {
+    if (months < 2 || months >= size.adultMonths) return null
+    val big = size == AdultSize.GRANDE || size == AdultSize.GIGANTE
+    return when {
+        months < 4 -> if (big) 8.0 to 8.0 else 10.0 to 10.0
+        months < 6 -> if (big) 7.0 to 7.0 else 8.0 to 8.0
+        months < 8 -> if (size == AdultSize.GIGANTE) 6.0 to 6.0 else 6.0 to 7.0
+        months < 10 -> if (size == AdultSize.GIGANTE) 5.0 to 5.0 else 5.0 to 6.0
+        size == AdultSize.GIGANTE ->
+            // O texto dá 4-5% de 10 a 14 meses e 4% de 18 a 24; de 14 a 18 mantém 4-5%.
+            if (months < 18) 4.0 to 5.0 else 4.0 to 4.0
+        size == AdultSize.GRANDE -> 4.0 to 5.0
+        else -> 4.0 to 6.0
+    }
+}
+
+/** Refeições por dia, pela idade (Cachorro Verde). */
+fun mealsPerDay(months: Int?): String = when {
+    months == null || months >= 6 -> "2 refeições por dia"
+    months < 4 -> "3 a 4 refeições por dia"
+    else -> "3 refeições por dia"
+}
+
+/** Idade em que começa a fase sênior, pelo porte (Cachorro Verde). */
+fun seniorYears(porte: Porte): Int = when (porte.name) {
+    "gigante" -> 5
+    "grande" -> 7
+    "médio" -> 8
+    else -> 9
+}
+
+/**
+ * Fases da vida adulta. O texto dá o exemplo de um beagle: 5% com 12 meses (jovem adulto),
+ * 4,5% com 2 anos (adulto), 3,5% com 5 anos (meia-idade) e 4 a 4,5% aos 12 anos (idoso).
+ * Daí: jovem adulto no teto da faixa, adulto no meio, meia-idade no piso e idoso de volta ao meio.
+ */
+enum class LifeStage(val label: String) {
+    JOVEM("Jovem adulta"),
+    ADULTO("Adulta"),
+    MEIA_IDADE("Meia-idade"),
+    IDOSO("Idosa"),
+}
+
+fun lifeStage(months: Int, porte: Porte): LifeStage {
+    val senior = seniorYears(porte) * 12
+    return when {
+        months >= senior -> LifeStage.IDOSO
+        months >= 5 * 12 -> LifeStage.MEIA_IDADE
+        months < 2 * 12 -> LifeStage.JOVEM
+        else -> LifeStage.ADULTO
+    }
+}
+
+/** [pct] é o ponto de partida dentro da faixa; ajuste depois conforme a silhueta. */
+data class Suggestion(
+    val title: String,
+    val minPct: Double?,
+    val maxPct: Double?,
+    val pct: Double?,
+    val note: String?,
+)
+
+/** Porção sugerida pelo peso e pela idade; null enquanto o peso não foi informado. */
+fun suggestion(dog: Dog, today: LocalDate = LocalDate.now()): Suggestion? {
+    if (dog.weightKg <= 0) return null
+    val months = dog.ageMonths(today)
+    if (months != null && months < 2) {
+        return Suggestion(
+            "Filhote com menos de 2 meses", null, null, null,
+            "A tabela começa em 2 meses; siga a orientação do veterinário.",
+        )
+    }
+    if (months != null && dog.isPuppy(today)) {
+        val (min, max) = puppyPct(months, dog.adultSize)!!
+        return Suggestion(
+            "Filhote de $months meses, porte adulto ${dog.adultSize.label.lowercase()}",
+            min, max, (min + max) / 2,
+            "Calculado sobre o peso atual, não o de adulta; recalcule todo mês. " +
+                "Filhotes devem crescer esbeltos: cintura visível e costelas fáceis de sentir.",
+        )
+    }
+    val base = porte(dog.weightKg) ?: return null
+    // Castradas tendem a engordar: o texto sugere em geral 0,5% a menos.
+    val p = if (dog.neutered) base.copy(minPct = base.minPct - 0.5, maxPct = base.maxPct - 0.5) else base
+    val castrada = if (dog.neutered) " castrada" else ""
+    if (months == null) {
+        return Suggestion(
+            "Adulta$castrada, porte ${p.name}", p.minPct, p.maxPct, null,
+            "Informe o nascimento para ajustar pela idade.",
+        )
+    }
+    val mid = (p.minPct + p.maxPct) / 2
+    val stage = lifeStage(months, p)
+    val (pct, note) = when (stage) {
+        LifeStage.JOVEM -> p.maxPct to
+            "Jovens adultas têm o metabolismo mais ativo: comece pelo teto da faixa."
+        LifeStage.ADULTO -> mid to
+            "Adulta: comece pelo meio da faixa."
+        LifeStage.MEIA_IDADE -> p.minPct to
+            "Na meia-idade o metabolismo desacelera: comece pelo piso da faixa."
+        LifeStage.IDOSO -> mid to
+            "Fase sênior (a partir de ${seniorYears(p)} anos no porte ${p.name}). Idosas podem precisar " +
+            "de mais comida que na meia-idade, porque aproveitam pior os nutrientes, principalmente a proteína."
+    }
+    val fullNote = if (dog.neutered) "$note Por ser castrada, a faixa já está 0,5% abaixo." else note
+    return Suggestion("${stage.label}$castrada, porte ${p.name}", p.minPct, p.maxPct, pct, fullNote)
+}
 
 /** Porte e faixa de comida diária (% do peso ideal), da tabela do Cachorro Verde para adultos. */
 data class Porte(val name: String, val minPct: Double, val maxPct: Double)
@@ -47,7 +183,10 @@ fun vegetableOilDose(weightKg: Double): String? = when {
 data class Meat(val name: String, val pricePerKg: Double)
 
 data class Config(
-    val dogs: List<Dog> = listOf(Dog("Mari", 0.4), Dog("Poranga", 0.8)),
+    val dogs: List<Dog> = listOf(
+        Dog("Mari", 0.4, birth = LocalDate.of(2015, 4, 1)),
+        Dog("Poranga", 0.8, birth = LocalDate.of(2021, 3, 1)),
+    ),
     val pctCarne: Double = 30.0,
     val pctVisceras: Double = 5.0,
     val pctVegetais: Double = 30.0,

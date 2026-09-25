@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -85,6 +86,7 @@ private val BR: Locale = Locale.forLanguageTag("pt-BR")
 private val money: NumberFormat = NumberFormat.getCurrencyInstance(BR)
 private val dayFmt = DateTimeFormatter.ofPattern("EEE, dd/MM", BR)
 private val shortFmt = DateTimeFormatter.ofPattern("dd/MM", BR)
+private val shortYearFmt = DateTimeFormatter.ofPattern("dd/MM/yyyy", BR)
 
 private fun num(v: Double, decimals: Int = 2): String =
     NumberFormat.getNumberInstance(BR).apply {
@@ -206,14 +208,14 @@ private fun TodayBanner(cfg: Config) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DateField(label: String, date: LocalDate, onDate: (LocalDate) -> Unit) {
+private fun DateField(label: String, date: LocalDate?, text: String? = null, onDate: (LocalDate) -> Unit) {
     var open by remember { mutableStateOf(false) }
     OutlinedButton(onClick = { open = true }, Modifier.fillMaxWidth()) {
-        Text("$label: ${date.format(dayFmt)}")
+        Text(text ?: "$label: ${date?.format(dayFmt) ?: "não informado"}")
     }
     if (open) {
         val state = rememberDatePickerState(
-            initialSelectedDateMillis = date.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli(),
+            initialSelectedDateMillis = date?.atStartOfDay()?.toInstant(ZoneOffset.UTC)?.toEpochMilli(),
         )
         DatePickerDialog(
             onDismissRequest = { open = false },
@@ -350,26 +352,54 @@ private fun IngredientsSection(cfg: Config, totalKg: Double) {
     }
 }
 
-/** Compara a porção diária com a faixa sugerida para o peso ideal. */
+private fun ageText(months: Int): String {
+    val y = months / 12
+    val m = months % 12
+    val ys = if (y == 1) "1 ano" else "$y anos"
+    val ms = if (m == 1) "1 mês" else "$m meses"
+    return when {
+        y == 0 -> ms
+        m == 0 -> ys
+        else -> "$ys e $ms"
+    }
+}
+
+private fun pctRange(min: Double, max: Double) =
+    if (min == max) "${num(min, 1)}%" else "${num(min, 1)} a ${num(max, 1)}%"
+
+/** Compara a porção diária com a faixa sugerida pelo peso e pela idade. */
 @Composable
 private fun PortionHint(dog: Dog) {
-    val p = porte(dog.weightKg)
-    if (p == null) {
+    val s = suggestion(dog)
+    if (s == null) {
         Text(
-            "Informe o peso ideal para ver a porção sugerida e as doses de óleo.",
+            "Informe o peso para ver a porção sugerida e as doses de óleo.",
             style = MaterialTheme.typography.bodySmall,
         )
         return
     }
-    val min = dog.weightKg * p.minPct / 100
-    val max = dog.weightKg * p.maxPct / 100
-    val inside = dog.kgPerDay in (min - 1e-9)..(max + 1e-9)
-    Text(
-        "Porte ${p.name}: ${num(p.minPct, 0)} a ${num(p.maxPct, 0)}% do peso = ${g(min)} a ${g(max)} por dia. " +
-            if (inside) "A porção atual está dentro da faixa." else "A porção atual (${g(dog.kgPerDay)}) está fora da faixa.",
-        style = MaterialTheme.typography.bodySmall,
-        color = if (inside) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
-    )
+    if (s.minPct != null && s.maxPct != null) {
+        val min = dog.weightKg * s.minPct / 100
+        val max = dog.weightKg * s.maxPct / 100
+        val inside = dog.kgPerDay in (min - 1e-9)..(max + 1e-9)
+        val range = if (min == max) g(min) else "${g(min)} a ${g(max)}"
+        Text(
+            "${s.title}: ${pctRange(s.minPct, s.maxPct)} do peso = $range por dia. " +
+                if (inside) "A porção atual está dentro da faixa." else "A porção atual (${g(dog.kgPerDay)}) está fora da faixa.",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (inside) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+        )
+        s.pct?.let { pct ->
+            Text(
+                "Para começar: ${num(pct, 2)}% = ${g(dog.weightKg * pct / 100)} por dia, em ${mealsPerDay(dog.ageMonths())}.",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    } else {
+        Text(s.title, style = MaterialTheme.typography.bodySmall)
+    }
+    s.note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 }
 
 @Composable
@@ -477,6 +507,59 @@ fun TipsScreen() {
                 style = MaterialTheme.typography.bodySmall,
             )
         }
+        Section("Quantidade por dia (filhotes)") {
+            TableRow("Idade", "Peq.", "Médio", "Grande", "Gig.", bold = true)
+            HorizontalDivider()
+            TableRow("2 a 4 meses", "10%", "10%", "8%", "8%")
+            TableRow("4 a 6 meses", "8%", "8%", "7%", "7%")
+            TableRow("6 a 8 meses", "6-7%", "6-7%", "6-7%", "6%")
+            TableRow("8 a 10 meses", "5-6%", "5-6%", "5-6%", "5%")
+            TableRow("10 a 14 meses", "4-6%", "4-6%", "4-5%", "4-5%")
+            TableRow("14 a 18 meses", "adulto", "4-6%", "4-5%", "4-5%")
+            TableRow("18 a 24 meses", "adulto", "adulto", "adulto", "4%")
+            Text(
+                "As colunas são o porte que o filhote terá adulto (pequeno 5 a 10 kg, médio 10 a 25 kg, " +
+                    "grande 25 a 35 kg, gigante acima de 35 kg). A conta é sobre o peso atual do filhote, " +
+                    "não sobre o que ele terá adulto; recalcule todo mês. Os pequenos terminam de crescer " +
+                    "por volta dos 12 meses; médios e grandes aos 18; gigantes aos 24. O texto não dá valor " +
+                    "para gigantes de 14 a 18 meses; o app mantém 4 a 5%.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text("Refeições: 3 a 4 por dia dos 2 aos 4 meses, 3 dos 4 aos 6 meses, 2 depois disso.", style = MaterialTheme.typography.bodySmall)
+        }
+        Section("Idade na vida adulta") {
+            Text(
+                "Exemplo do texto, um beagle: 5% do peso com 12 meses (jovem adulto), 4,5% com 2 anos " +
+                    "(adulto), 3,5% com 5 anos (meia-idade) e de volta a 4 ou 4,5% aos 12 anos (idoso).",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                "Jovens adultos têm o metabolismo mais ativo e comem mais; na meia-idade comem menos. " +
+                    "Idosos podem precisar de mais comida que na meia-idade, porque aproveitam pior os " +
+                    "nutrientes, principalmente a proteína. Restringir proteína ou gordura de um idoso " +
+                    "saudável não protege rins nem fígado.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text("A fase sênior começa aos", style = MaterialTheme.typography.labelLarge)
+            TableRow("Gigante", "5 anos")
+            TableRow("Grande", "7 anos")
+            TableRow("Médio", "8 a 9 anos")
+            TableRow("Pequeno e miniatura", "9 a 10 anos")
+            Text(
+                "No app: até 2 anos usa o teto da faixa, de 2 a 5 anos o meio, da meia-idade (5 anos) " +
+                    "até a fase sênior o piso, e na fase sênior volta ao meio.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        Section("Ajuste fino") {
+            Bullets(
+                "Calcule sempre sobre o peso ideal, não sobre o peso atual de um adulto gordo ou magro demais.",
+                "Observe por 2 a 4 semanas. Emagreceu sem querer? Suba 0,5%. Engordou? Desça 0,5%.",
+                "Guie-se pela silhueta, não pelo apetite: cintura visível de cima e costelas fáceis de sentir.",
+                "Castradas tendem a engordar: em geral 0,5% a menos (marque em Ajustes).",
+                "Muito ativas comem mais; no verão pode reduzir um pouco e no inverno aumentar.",
+            )
+        }
         Section("Óleos") {
             Text("Óleo de peixe (todo dia ou 3 vezes por semana)", style = MaterialTheme.typography.labelLarge)
             TableRow("Até 5 kg", "1 cápsula de 500 mg")
@@ -490,7 +573,7 @@ fun TipsScreen() {
             TableRow("25 kg ou mais", "1 colher de sopa, 2 vezes")
         }
         Text(
-            "Fonte: cachorroverde.com.br (dieta cozida para cães, conservação e alimentos tóxicos). " +
+            "Fonte: cachorroverde.com.br (dieta cozida para cães, pet idoso, conservação e alimentos tóxicos). " +
                 "Não substitui a orientação de um veterinário.",
             style = MaterialTheme.typography.bodySmall,
         )
@@ -609,6 +692,7 @@ private fun DayCell(date: LocalDate, cfg: Config, today: LocalDate, modifier: Mo
 
 // ---------------------------------------------------------------- Ajustes
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(cfg: Config, update: (Config) -> Unit) {
     // Trocar a chave recria os campos de texto com os valores restaurados.
@@ -629,8 +713,38 @@ fun SettingsScreen(cfg: Config, update: (Config) -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NumberField("Peso ideal", dog.weightKg, { v -> set { it.copy(weightKg = v) } }, Modifier.weight(1f), "kg")
+                        NumberField(
+                            if (dog.isPuppy()) "Peso atual" else "Peso ideal",
+                            dog.weightKg, { v -> set { it.copy(weightKg = v) } }, Modifier.weight(1f), "kg",
+                        )
                         NumberField("Come por dia", dog.kgPerDay, { v -> set { it.copy(kgPerDay = v) } }, Modifier.weight(1f), "kg")
+                    }
+                    DateField(
+                        "Nascimento", dog.birth,
+                        text = dog.birth?.let { b -> "Nascimento: ${b.format(shortYearFmt)} (${ageText(dog.ageMonths()!!)})" },
+                    ) { d -> set { it.copy(birth = d) } }
+                    if (!dog.isPuppy()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(dog.neutered, { v -> set { it.copy(neutered = v) } })
+                            Text("Castrada (0,5% a menos na porção)", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    if (dog.isPuppy()) {
+                        Text("Porte quando adulta", style = MaterialTheme.typography.labelLarge)
+                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                            AdultSize.entries.forEachIndexed { k, size ->
+                                SegmentedButton(
+                                    dog.adultSize == size,
+                                    { set { it.copy(adultSize = size) } },
+                                    SegmentedButtonDefaults.itemShape(k, AdultSize.entries.size),
+                                    icon = {},
+                                ) { Text(size.label, maxLines = 1) }
+                            }
+                        }
+                        Text(
+                            "${dog.adultSize.label}: ${dog.adultSize.range} quando adulta.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
                     PortionHint(dog)
                 }

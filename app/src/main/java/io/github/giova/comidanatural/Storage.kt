@@ -16,6 +16,10 @@ object Storage {
                     p.getString("dog_${i}_name", null) ?: dog.name,
                     d("dog_${i}_kg", dog.kgPerDay),
                     d("dog_${i}_weight", dog.weightKg),
+                    p.getString("dog_${i}_birth", null)?.let(LocalDate::parse) ?: dog.birth,
+                    p.getString("dog_${i}_adult_size", null)
+                        ?.let { n -> AdultSize.entries.firstOrNull { it.name == n } } ?: dog.adultSize,
+                    p.getBoolean("dog_${i}_neutered", dog.neutered),
                 )
             },
             pctCarne = d("pct_carne", def.pctCarne),
@@ -40,6 +44,9 @@ object Storage {
             e.putString("dog_${i}_name", dog.name)
             e.putString("dog_${i}_kg", dog.kgPerDay.toString())
             e.putString("dog_${i}_weight", dog.weightKg.toString())
+            e.putString("dog_${i}_birth", dog.birth?.toString())
+            e.putString("dog_${i}_adult_size", dog.adultSize.name)
+            e.putBoolean("dog_${i}_neutered", dog.neutered)
         }
         e.putString("pct_carne", c.pctCarne.toString())
         e.putString("pct_visceras", c.pctVisceras.toString())
