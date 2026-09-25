@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Kitchen
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -133,7 +134,8 @@ fun App() {
             NavigationBar {
                 NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Icons.Default.Kitchen, null) }, label = { Text("Preparo") })
                 NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.Default.CalendarMonth, null) }, label = { Text("Calendário") })
-                NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Default.Settings, null) }, label = { Text("Ajustes") })
+                NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Default.Lightbulb, null) }, label = { Text("Dicas") })
+                NavigationBarItem(tab == 3, { tab = 3 }, { Icon(Icons.Default.Settings, null) }, label = { Text("Ajustes") })
             }
         },
     ) { pad ->
@@ -141,6 +143,7 @@ fun App() {
             when (tab) {
                 0 -> PrepScreen(cfg)
                 1 -> CalendarScreen(cfg)
+                2 -> TipsScreen()
                 else -> SettingsScreen(cfg, update)
             }
         }
@@ -311,6 +314,7 @@ fun PrepScreen(cfg: Config) {
         IngredientsSection(cfg, batch.totalKg)
         DogsSection(cfg, batch)
         RiceSection(cfg, batch.totalKg)
+        StorageSection(batch)
     }
 }
 
@@ -346,6 +350,28 @@ private fun IngredientsSection(cfg: Config, totalKg: Double) {
     }
 }
 
+/** Compara a porção diária com a faixa sugerida para o peso ideal. */
+@Composable
+private fun PortionHint(dog: Dog) {
+    val p = porte(dog.weightKg)
+    if (p == null) {
+        Text(
+            "Informe o peso ideal para ver a porção sugerida e as doses de óleo.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        return
+    }
+    val min = dog.weightKg * p.minPct / 100
+    val max = dog.weightKg * p.maxPct / 100
+    val inside = dog.kgPerDay in (min - 1e-9)..(max + 1e-9)
+    Text(
+        "Porte ${p.name}: ${num(p.minPct, 0)} a ${num(p.maxPct, 0)}% do peso = ${g(min)} a ${g(max)} por dia. " +
+            if (inside) "A porção atual está dentro da faixa." else "A porção atual (${g(dog.kgPerDay)}) está fora da faixa.",
+        style = MaterialTheme.typography.bodySmall,
+        color = if (inside) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+    )
+}
+
 @Composable
 private fun DogsSection(cfg: Config, batch: Batch) {
     val daily = cfg.dailyKg
@@ -356,12 +382,118 @@ private fun DogsSection(cfg: Config, batch: Batch) {
                 "Porção diária: ${g(dog.kgPerDay)}  ·  no lote: ${kg(batch.totalKg * dogShare)}",
                 style = MaterialTheme.typography.bodyMedium,
             )
+            PortionHint(dog)
             TableRow("", "Por dia", "No lote", bold = true)
             HorizontalDivider()
             cfg.ingredients.forEach { i ->
                 TableRow(i.name, g(dog.kgPerDay * cfg.share(i)), kg(batch.totalKg * dogShare * cfg.share(i)))
             }
+            val fish = fishOilDose(dog.weightKg)
+            val veg = vegetableOilDose(dog.weightKg)
+            if (fish != null && veg != null) {
+                HorizontalDivider()
+                Text("Óleos (pelo peso de ${kg(dog.weightKg)})", style = MaterialTheme.typography.labelLarge)
+                Text("Óleo de peixe: $fish", style = MaterialTheme.typography.bodyMedium)
+                Text("Óleo vegetal (azeite, coco): $veg", style = MaterialTheme.typography.bodyMedium)
+            }
         }
+    }
+}
+
+@Composable
+private fun StorageSection(batch: Batch) {
+    Section("Conservação") {
+        Text("Geladeira: comida cozida até 3 dias, em pote tampado; crua até 2 dias.", style = MaterialTheme.typography.bodyMedium)
+        Text("Congelador: o ideal é usar em 30 a 45 dias.", style = MaterialTheme.typography.bodyMedium)
+        Text("Descongele na parte de baixo da geladeira: leva de 12 a 36 horas.", style = MaterialTheme.typography.bodyMedium)
+        if (batch.naturalDays > 3) {
+            Text(
+                "Este lote dá ${batch.naturalDays} dias de comida: deixe até 3 dias na geladeira e congele o resto.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Dicas
+
+@Composable
+private fun Bullets(vararg items: String) {
+    items.forEach { Text("•  $it", style = MaterialTheme.typography.bodyMedium) }
+}
+
+@Composable
+fun TipsScreen() {
+    ScreenColumn {
+        Section("Conservação") {
+            Bullets(
+                "Geladeira: comida cozida dura até 3 dias, em pote tampado; crua, até 2 dias. " +
+                    "Depois disso começa a estragar, e nem sempre dá para perceber.",
+                "Congelador: o ideal é usar em 30 a 45 dias.",
+                "Descongele na parte de baixo da geladeira (12 a 36 horas). " +
+                    "Para aquecer, no máximo em banho-maria, para preservar as vitaminas.",
+            )
+        }
+        Section("Preparo") {
+            Bullets(
+                "Não use panela de pressão: perde nutrientes demais.",
+                "Não lave as carnes: isso leva as partículas da superfície para dentro.",
+                "Não cozinhe demais: deixe a carne ao ponto, com o miolo rosado.",
+                "Cozinhe os vegetais no mesmo caldo em que cozinhou a carne, para aproveitar os minerais.",
+                "Carboidratos sempre bem cozidos: cru, o cão não digere.",
+                "Deixar os grãos de molho por 6 a 8 horas antes de cozinhar reduz os antinutrientes.",
+            )
+        }
+        Section("Alimentos tóxicos: nunca dar") {
+            Bullets(
+                "Cebola: causa anemia grave.",
+                "Uva e uva-passa: prejudicam os rins.",
+                "Carambola: prejudica os rins.",
+                "Chocolate: a teobromina intoxica (taquicardia, vômito, diarreia).",
+                "Xilitol (adoçante): hipoglicemia e convulsões; pode matar.",
+                "Macadâmia: fraqueza, tremores, vômito.",
+                "Abacate: a polpa não é tóxica, mas a casca e o caroço são.",
+            )
+        }
+        Section("Evitar") {
+            Bullets(
+                "Milho e trigo: associados a alergias.",
+                "Soja: proteína inadequada para carnívoros, ligada a alergias e desequilíbrio hormonal.",
+            )
+        }
+        Section("Quantidade por dia (adultos)") {
+            TableRow("Peso ideal", "% do peso", bold = true)
+            HorizontalDivider()
+            TableRow("Até 3 kg", "7 a 10%")
+            TableRow("3 a 5 kg", "5 a 6%")
+            TableRow("5 a 10 kg", "4 a 6%")
+            TableRow("10 a 25 kg", "4 a 5%")
+            TableRow("25 a 35 kg", "4 a 5%")
+            TableRow("35 a 42 kg", "3 a 4%")
+            TableRow("Mais de 42 kg", "3 a 4%")
+            Text(
+                "Exemplo: 12 kg × 4% = 480 g por dia. Varia com a atividade e o metabolismo: " +
+                    "acompanhe o peso e ajuste.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        Section("Óleos") {
+            Text("Óleo de peixe (todo dia ou 3 vezes por semana)", style = MaterialTheme.typography.labelLarge)
+            TableRow("Até 5 kg", "1 cápsula de 500 mg")
+            TableRow("5 a 20 kg", "1 cápsula de 1 g")
+            TableRow("Mais de 20 kg", "2 cápsulas de 2 g")
+            Text("Óleo vegetal (azeite, coco)", style = MaterialTheme.typography.labelLarge)
+            TableRow("Até 2 kg", "½ colher de chá, 1 vez")
+            TableRow("3 a 7 kg", "½ colher de chá, 2 vezes")
+            TableRow("8 a 15 kg", "1 colher de sobremesa, 1 vez")
+            TableRow("15 a 25 kg", "1 colher de sopa, 1 vez")
+            TableRow("25 kg ou mais", "1 colher de sopa, 2 vezes")
+        }
+        Text(
+            "Fonte: cachorroverde.com.br (dieta cozida para cães, conservação e alimentos tóxicos). " +
+                "Não substitui a orientação de um veterinário.",
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 
@@ -483,24 +615,24 @@ fun SettingsScreen(cfg: Config, update: (Config) -> Unit) {
     var resetKey by remember { mutableIntStateOf(0) }
     key(resetKey) {
         ScreenColumn {
-            Section("Cadelas (kg por dia)") {
+            Section("Cadelas") {
                 cfg.dogs.forEachIndexed { i, dog ->
+                    fun set(f: (Dog) -> Dog) =
+                        update(cfg.copy(dogs = cfg.dogs.toMutableList().also { it[i] = f(it[i]) }))
+                    if (i > 0) HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                    var name by remember { mutableStateOf(dog.name) }
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { v -> name = v; set { it.copy(name = v) } },
+                        label = { Text("Nome") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        var name by remember { mutableStateOf(dog.name) }
-                        OutlinedTextField(
-                            value = name,
-                            onValueChange = { v ->
-                                name = v
-                                update(cfg.copy(dogs = cfg.dogs.toMutableList().also { it[i] = it[i].copy(name = v) }))
-                            },
-                            label = { Text("Nome") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1.3f),
-                        )
-                        NumberField("Por dia", dog.kgPerDay, { v ->
-                            update(cfg.copy(dogs = cfg.dogs.toMutableList().also { it[i] = it[i].copy(kgPerDay = v) }))
-                        }, Modifier.weight(1f), "kg")
+                        NumberField("Peso ideal", dog.weightKg, { v -> set { it.copy(weightKg = v) } }, Modifier.weight(1f), "kg")
+                        NumberField("Come por dia", dog.kgPerDay, { v -> set { it.copy(kgPerDay = v) } }, Modifier.weight(1f), "kg")
                     }
+                    PortionHint(dog)
                 }
             }
 

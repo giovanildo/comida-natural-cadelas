@@ -9,7 +9,40 @@ enum class DayType(val label: String) {
     JEJUM("Jejum"),
 }
 
-data class Dog(val name: String, val kgPerDay: Double)
+/** [weightKg] é o peso ideal; 0 quando ainda não foi informado. */
+data class Dog(val name: String, val kgPerDay: Double, val weightKg: Double = 0.0)
+
+/** Porte e faixa de comida diária (% do peso ideal), da tabela do Cachorro Verde para adultos. */
+data class Porte(val name: String, val minPct: Double, val maxPct: Double)
+
+fun porte(weightKg: Double): Porte? = when {
+    weightKg <= 0 -> null
+    weightKg <= 3 -> Porte("miniatura", 7.0, 10.0)
+    weightKg <= 5 -> Porte("miniatura", 5.0, 6.0)
+    weightKg <= 10 -> Porte("pequeno", 4.0, 6.0)
+    weightKg <= 25 -> Porte("médio", 4.0, 5.0)
+    weightKg <= 35 -> Porte("grande", 4.0, 5.0)
+    weightKg <= 42 -> Porte("grande", 3.0, 4.0)
+    else -> Porte("gigante", 3.0, 4.0)
+}
+
+/** Dose de manutenção de óleo de peixe, pelo peso (Cachorro Verde). */
+fun fishOilDose(weightKg: Double): String? = when {
+    weightKg <= 0 -> null
+    weightKg <= 5 -> "1 cápsula de 500 mg"
+    weightKg <= 20 -> "1 cápsula de 1 g"
+    else -> "2 cápsulas de 2 g"
+}?.let { "$it, todo dia ou 3 vezes por semana" }
+
+/** Dose de óleo vegetal (azeite, coco), pelo peso (Cachorro Verde). */
+fun vegetableOilDose(weightKg: Double): String? = when {
+    weightKg <= 0 -> null
+    weightKg <= 2 -> "½ colher de chá em 1 refeição"
+    weightKg <= 7 -> "½ colher de chá no almoço e ½ no jantar"
+    weightKg <= 15 -> "1 colher de sobremesa em 1 refeição"
+    weightKg <= 25 -> "1 colher de sopa em 1 refeição"
+    else -> "1 colher de sopa no almoço e 1 no jantar"
+}
 
 data class Meat(val name: String, val pricePerKg: Double)
 
@@ -18,7 +51,8 @@ data class Config(
     val pctCarne: Double = 30.0,
     val pctVisceras: Double = 5.0,
     val pctVegetais: Double = 30.0,
-    val pctCarbo: Double = 30.0,
+    // Referência: site Cachorro Verde.
+    val pctCarbo: Double = 35.0,
     val priceCarbo: Double = 3.0,
     val priceVegetais: Double = 2.0,
     val priceVisceras: Double = 10.0,

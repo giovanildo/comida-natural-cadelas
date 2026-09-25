@@ -12,7 +12,11 @@ object Storage {
         fun d(key: String, fallback: Double) = p.getString(key, null)?.toDoubleOrNull() ?: fallback
         return Config(
             dogs = def.dogs.mapIndexed { i, dog ->
-                Dog(p.getString("dog_${i}_name", null) ?: dog.name, d("dog_${i}_kg", dog.kgPerDay))
+                Dog(
+                    p.getString("dog_${i}_name", null) ?: dog.name,
+                    d("dog_${i}_kg", dog.kgPerDay),
+                    d("dog_${i}_weight", dog.weightKg),
+                )
             },
             pctCarne = d("pct_carne", def.pctCarne),
             pctVisceras = d("pct_visceras", def.pctVisceras),
@@ -35,6 +39,7 @@ object Storage {
         c.dogs.forEachIndexed { i, dog ->
             e.putString("dog_${i}_name", dog.name)
             e.putString("dog_${i}_kg", dog.kgPerDay.toString())
+            e.putString("dog_${i}_weight", dog.weightKg.toString())
         }
         e.putString("pct_carne", c.pctCarne.toString())
         e.putString("pct_visceras", c.pctVisceras.toString())
